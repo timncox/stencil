@@ -14,3 +14,13 @@ clean:
 	rm -rf $(BUILD)
 
 .PHONY: all clean
+
+# Web page parity: docs/stencil-core.js vs the C engine (needs node).
+web: $(BUILD)/web_parity_driver
+	node web_parity.mjs
+
+$(BUILD)/web_parity_driver: web_parity_driver.c ../core/stencil.c ../core/stencil.h
+	@mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) -I../core -o $@ web_parity_driver.c ../core/stencil.c -lm
+
+.PHONY: web

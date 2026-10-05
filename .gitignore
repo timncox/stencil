@@ -6,3 +6,4 @@ build-*/
 *.hex
 .DS_Store
 .claude/
+.playwright-mcp/
