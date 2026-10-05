@@ -591,7 +591,6 @@ static void OnRender(uint32_t t_ms)
 
 /* ---- audio ------------------------------------------------------------------- */
 
-static float    g_zero[kBlockSize];
 static uint32_t g_tr_left = 0;
 static uint32_t g_last_starts = 0;
 static uint32_t g_last_beat = 0xFFFFFFFFu;
@@ -619,7 +618,6 @@ static void AudioCallback(daisy::AudioHandle::InputBuffer  in,
 
     const float* inr = G_MONO ? in[0] : in[1];
     st_process(&ST, in[0], inr, out[0], out[1], nullptr, nullptr, (uint32_t)size);
-    (void)g_zero;
 
     /* J7: the left envelope. J8: a pulse on each open step. */
     G_ENV = st_env(&ST, 0);

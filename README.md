@@ -92,8 +92,8 @@ Lab card).
 
 Menu: Source, Word, Rate, Steps, Attack, Curve, Filter, Reso, Mode
 (Gate/Duck), Swing, R Off, Mix, Tempo, ClkIn (ppqn), Input, Mods. Settings
-and the eight words persist in QSPI (7 MB in) two seconds after the last
-edit.
+and the eight words persist in QSPI (7 MB + 128 KB in, clear of Relay's
+sector at 7 MB) two seconds after the last edit.
 
 **Typing a word on the Patch.** Click (push and release) on the Word row:
 turn changes the letter under the cursor, click moves to the next letter,

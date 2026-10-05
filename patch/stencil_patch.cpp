@@ -46,7 +46,7 @@ MidiUsbHandler  usb_midi;
 static stencil_t ST;
 
 /* ------------------------------------------------------------------------ */
-/* Persistent settings (QSPI, 7 MB in, as the other Patch ports)              */
+/* Persistent settings (QSPI, 7 MB + 128 KB in)                               */
 
 static const char *const SRC_NAME[ST_SRC_COUNT] = {"Bank", "Euclid", "Morse"};
 static const char *const POL_NAME[2]            = {"Gate", "Duck"};
@@ -67,7 +67,9 @@ struct Settings
     bool operator!=(const Settings &o) const { return !(*this == o); }
 };
 static constexpr uint32_t kMagic = 0x53544E31; /* 'STN1' */
-static constexpr uint32_t kSettingsOffset = 0x00700000;
+/* 7 MB + 128 KB: Relay owns the sector at 7 MB, and a shared one would reset
+ * each firmware's settings (and these words) on every switch between them. */
+static constexpr uint32_t kSettingsOffset = 0x00720000;
 
 static Settings defaults()
 {
