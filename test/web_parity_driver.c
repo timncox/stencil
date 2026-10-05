@@ -1,6 +1,7 @@
 /* Driver for web_parity.mjs: reads commands on stdin, answers with the C
  * engine's result, one line each.
  *   M <text>        -> Morse bits as 0/1
+ *   P <fit> <rate> <text> -> st_build_pattern in MORSE: "len beats bits"
  *   C <hex bytes>   -> st_apply_cmd(cmd = first byte, payload = rest);
  *                      prints "rc user_len user_mask word0..7 source index"
  */
@@ -22,6 +23,25 @@ int main(void)
             uint32_t bits[ST_MAX_UNITS / 32] = {0};
             uint32_t len = st_morse_encode(line + 2, bits, ST_MAX_UNITS);
             for (uint32_t i = 0; i < len; i++) putchar(((bits[i >> 5] >> (i & 31)) & 1u) ? '1' : '0');
+            putchar('\n');
+        }
+        else if (line[0] == 'P' && line[1] == ' ')
+        {
+            char *p = line + 2;
+            unsigned fit = (unsigned)strtoul(p, &p, 10);
+            unsigned rate = (unsigned)strtoul(p, &p, 10);
+            if (*p == ' ') p++;
+            st_params_t pr;
+            st_store_t s;
+            static st_pattern_t pt;
+            st_default_params(&pr);
+            st_default_store(&s);
+            pr.source = ST_SRC_MORSE; pr.word = 0; pr.fit = (uint8_t)fit; pr.rate = (uint8_t)rate;
+            strncpy(s.words[0], p, ST_WORD_MAX);
+            s.words[0][ST_WORD_MAX] = 0;
+            st_build_pattern(&pr, &s, &pt);
+            printf("%u %u ", pt.len, pt.beats);
+            for (uint32_t i = 0; i < pt.len; i++) putchar(st_pattern_open(&pt, 0, i) ? '1' : '0');
             putchar('\n');
         }
         else if (line[0] == 'C' && line[1] == ' ')

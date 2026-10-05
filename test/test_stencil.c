@@ -120,9 +120,9 @@ static void test_build(void)
     CHECK(pt.len == 12);
     for (uint32_t i = 0; i < 12; i++) CHECK(st_pattern_open(&pt, 0, i));
 
-    p.source = ST_SRC_MORSE; p.word = 2;                          /* PARIS */
+    p.source = ST_SRC_MORSE; p.word = 2; p.fit = ST_FIT_FREE;     /* PARIS */
     st_build_pattern(&p, &s, &pt);
-    CHECK(pt.len == 50 && pt.tie);
+    CHECK(pt.len == 50 && pt.tie && pt.beats == 0);
     s.words[3][0] = 0;                                            /* empty word: open */
     p.word = 3;
     st_build_pattern(&p, &s, &pt);
@@ -342,7 +342,7 @@ static void test_morse_tie(void)
     /* T = one dah: three units open, held through even with a short gate */
     st_params_t p;
     st_default_params(&p);
-    p.source = ST_SRC_MORSE; p.word = 0;
+    p.source = ST_SRC_MORSE; p.word = 0; p.fit = ST_FIT_FREE;
     p.attack = 0.0f; p.release = 0.0f; p.gate = 0.3f;
     setup(&p);
     strcpy(STORE.words[0], "T");
@@ -354,6 +354,82 @@ static void test_morse_tie(void)
     CHECKF(out_at(12000 + 4500), 0.0f, 1e-4);     /* unit 3 past the gate: closes */
     CHECKF(out_at(18000 + 3000), 0.0f, 1e-4);     /* the word gap                 */
     CHECKF(out_at(60000 + 1000), 1.0f, 1e-4);     /* loops after 10 units         */
+}
+
+static void test_fit(void)
+{
+    st_params_t p;
+    st_store_t  s;
+    st_pattern_t pt;
+    st_default_params(&p);
+    st_default_store(&s);
+    CHECK(p.fit == ST_FIT_PAD);                                   /* the default */
+    p.source = ST_SRC_MORSE; p.word = 2;                          /* PARIS, 50 units */
+
+    /* PAD: to the next bar line at the rate's steps per bar */
+    p.rate = ST_RATE_1_16;  st_build_pattern(&p, &s, &pt); CHECK(pt.len == 64 && pt.beats == 0);
+    p.rate = ST_RATE_1_8;   st_build_pattern(&p, &s, &pt); CHECK(pt.len == 56);
+    p.rate = ST_RATE_1_16T; st_build_pattern(&p, &s, &pt); CHECK(pt.len == 72);
+    p.rate = ST_RATE_1_32;  st_build_pattern(&p, &s, &pt); CHECK(pt.len == 64);
+    p.rate = ST_RATE_1_1;   st_build_pattern(&p, &s, &pt); CHECK(pt.len == 50);
+    /* padding is closed, the word itself unchanged */
+    p.rate = ST_RATE_1_16;  st_build_pattern(&p, &s, &pt);
+    for (uint32_t i = 43; i < 64; i++) CHECK(!st_pattern_open(&pt, 0, i));
+    CHECK(st_pattern_open(&pt, 0, 0));
+    /* E: 8 units -> one bar of 16 */
+    strcpy(s.words[0], "E"); p.word = 0;
+    st_build_pattern(&p, &s, &pt); CHECK(pt.len == 16);
+    /* a word at the 1024 cap stays whole bars (1024 = 64 bars of 16) */
+    memset(s.words[0], '0', ST_WORD_MAX); s.words[0][ST_WORD_MAX] = 0;
+    st_build_pattern(&p, &s, &pt); CHECK(pt.len <= ST_MAX_UNITS && pt.len % 16 == 0);
+    /* an empty word stays a single open step */
+    s.words[0][0] = 0;
+    st_build_pattern(&p, &s, &pt); CHECK(pt.len == 1);
+
+    /* BARS: the length is the word's, the span is n bars */
+    p.word = 2;
+    p.fit = ST_FIT_1_BAR;  st_build_pattern(&p, &s, &pt); CHECK(pt.len == 50 && pt.beats == 4);
+    p.fit = ST_FIT_8_BARS; st_build_pattern(&p, &s, &pt); CHECK(pt.beats == 32);
+
+    /* 1 bar at 120 BPM = 96000 frames; PARIS units are 1920 frames.
+     * P = .--. -> unit 0 dit, 1 gap, 2-4 dah, 5 gap, 6-8 dah, 9 gap, 10 dit */
+    p.fit = ST_FIT_1_BAR; p.attack = 0.0f; p.release = 0.0f; p.gate = 0.5f;
+    setup(&p);
+    STORE = s;
+    st_build_pattern(&p, &STORE, st_back_pattern(&S));
+    st_commit_pattern(&S);
+    g_frame = 0;
+    CHECKF(out_at(500), 1.0f, 1e-4);                /* unit 0, inside the gate     */
+    CHECKF(out_at(1920 + 960), 0.0f, 1e-4);         /* unit 1: gap                 */
+    CHECKF(out_at(3 * 1920 + 1500), 1.0f, 1e-4);    /* unit 3, mid-dah: held        */
+    CHECKF(out_at(96000 - 500), 0.0f, 1e-4);        /* the closing gap              */
+    CHECKF(out_at(96000 + 500), 1.0f, 1e-4);        /* bar 2 starts the word again  */
+    CHECK(st_step(&S) == 0);
+
+    /* 2 bars: units are 3840 frames, loop at 192000 */
+    p.fit = ST_FIT_2_BARS;
+    setup(&p);
+    st_build_pattern(&p, &STORE, st_back_pattern(&S));
+    st_commit_pattern(&S);
+    g_frame = 0;
+    CHECKF(out_at(3840 + 1920), 0.0f, 1e-4);
+    CHECKF(out_at(3 * 3840 + 3000), 1.0f, 1e-4);
+    CHECKF(out_at(192000 + 1000), 1.0f, 1e-4);
+
+    /* clocked: 100 BPM, 24 ppqn, reset with the first edge -> the word
+     * restarts every 4 beats exactly, whatever the free tempo says */
+    p.fit = ST_FIT_1_BAR; p.bpm = 77.0f;
+    setup(&p);
+    st_build_pattern(&p, &STORE, st_back_pattern(&S));
+    st_commit_pattern(&S);
+    g_frame = 0;
+    for (int k = 0; k < 24; k++) { st_clock_edge(&S, 24); run_dc(1200, NULL, 0); }
+    st_clock_edge(&S, 24);
+    st_reset(&S);
+    for (int k = 0; k < 48; k++) { run_dc(1200, NULL, 0); st_clock_edge(&S, 24); }
+    CHECK(st_step(&S) == 25);                       /* half a bar = half the word */
+    for (int k = 0; k < 48; k++) { run_dc(1200, NULL, 0); st_clock_edge(&S, 24); }
+    CHECK(st_step(&S) == 0);                        /* and round again on the bar */
 }
 
 static void test_cmds(void)
@@ -388,6 +464,10 @@ static void test_cmds(void)
     CHECK(st_apply_cmd(&s, &p, ST_CMD_SELECT, sel_bad, 2) != 0);
     CHECK(p.source == ST_SRC_MORSE); /* a bad select changes nothing */
     CHECK(st_apply_cmd(&s, &p, 99, sel, 2) != 0);
+    const uint8_t fit[] = {ST_FIT_4_BARS};
+    CHECK(st_apply_cmd(&s, &p, ST_CMD_SET_FIT, fit, 1) == 0 && p.fit == ST_FIT_4_BARS);
+    const uint8_t fit_bad[] = {ST_FIT_COUNT};
+    CHECK(st_apply_cmd(&s, &p, ST_CMD_SET_FIT, fit_bad, 1) != 0 && p.fit == ST_FIT_4_BARS);
 }
 
 static void test_stability(void)
@@ -450,6 +530,7 @@ int main(void)
     test_clock();
     test_swing();
     test_morse_tie();
+    test_fit();
     test_cmds();
     test_stability();
     test_swap();

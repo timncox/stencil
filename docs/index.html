@@ -101,7 +101,7 @@ select { font: 14px var(--body); padding: 4px 6px; background: var(--panel); col
   <header>
     <div>
       <h1>Stencil</h1>
-      <p class="tag">Type a word, hear its Morse as a gate pattern, and send it to the Alchemy Lab or the Daisy Patch. Dit is one step open, dah is three.</p>
+      <p class="tag">Type a word, hear its Morse as a gate pattern, fit it to 1, 2, 4 or 8 bars, and send it to the Alchemy Lab or the Daisy Patch. Dit is one unit open, dah is three.</p>
     </div>
     <div class="conn">
       <button class="chip" id="connLab" type="button"><span class="dot"></span>Alchemy Lab · USB</button>
@@ -129,6 +129,8 @@ select { font: 14px var(--body); padding: 4px 6px; background: var(--panel); col
       </div>
       <label for="sound">Sound</label>
       <select id="sound"><option value="pad">Pad chord</option><option value="drone">Saw drone</option><option value="noise">Noise</option></select>
+      <label for="fit">Fit</label>
+      <select id="fit"></select>
       <label for="mode">Mode</label>
       <select id="mode"><option value="0">Gate</option><option value="1">Duck</option></select>
     </div>
@@ -169,6 +171,7 @@ let slot = 0;
 let source = 2;
 let bankIx = 0;
 let user = [1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1];
+let fit = 1;   /* Pad, the module's default */
 try { const s = JSON.parse(localStorage.getItem('stencil.words') || 'null'); if (Array.isArray(s) && s.length === 8) words = s.map(String); } catch (e) {}
 const saveLocal = () => { try { localStorage.setItem('stencil.words', JSON.stringify(words)); } catch (e) {} };
 
@@ -188,8 +191,8 @@ const K = {
 function pattern() {
   const steps = K.steps.v;
   if (source === 2) {
-    const b = SC.morseEncode(words[slot]);
-    return { bits: b.length ? b : [1], tie: true };
+    const f = SC.fitMorse(SC.morseEncode(words[slot]), fit, K.rate.v);
+    return { bits: f.bits, tie: true, beats: f.beats };
   }
   if (source === 1) {
     const k = Math.min(K.hits.v, steps);
@@ -250,12 +253,13 @@ function drawTape() {
 }
 function renderStats() {
   const pt = pattern(), n = pt.bits.length, spb = SC.RATES[K.rate.v][1];
-  const beats = n / spb, secs = beats * 60 / K.bpm.v;
+  const beats = pt.beats || n / spb, secs = beats * 60 / K.bpm.v;
   const open = pt.bits.reduce((a, b) => a + b, 0);
   $('stats').innerHTML = '';
   const add = (k, v) => { const s = document.createElement('span'); s.innerHTML = k + ' <b></b>'; s.querySelector('b').textContent = v; $('stats').appendChild(s); };
   add('steps', n); add('open', Math.round(100 * open / n) + '%');
-  add('loop', beats.toFixed(beats % 1 ? 2 : 0) + ' beats'); add('at ' + K.bpm.v + ' BPM', secs.toFixed(2) + ' s');
+  add('loop', beats % 4 === 0 ? (beats / 4) + (beats === 4 ? ' bar' : ' bars') : beats.toFixed(beats % 1 ? 2 : 0) + ' beats (not whole bars)');
+  if (pt.beats) add('unit', (secs / n * 1000).toFixed(0) + ' ms, off the step grid'); add('at ' + K.bpm.v + ' BPM', secs.toFixed(2) + ' s');
   if (source === 2 && n > 1024 - 1) add('note', 'truncated at 1024 steps');
 }
 
@@ -336,7 +340,7 @@ function makeSource() {
 }
 function schedule() {
   const pt = pattern(), n = pt.bits.length, spb = SC.RATES[K.rate.v][1];
-  const stepDur = 60 / K.bpm.v / spb, depth = K.depth.v / 100, filt = K.filter.v / 100, duck = $('mode').value === '1';
+  const stepDur = pt.beats ? pt.beats * 60 / K.bpm.v / n : 60 / K.bpm.v / spb, depth = K.depth.v / 100, filt = K.filter.v / 100, duck = $('mode').value === '1';
   const att = Math.max(K.attack.v / 100 * stepDur, 0.001), rel = Math.max(K.release.v / 100 * stepDur, 0.001), gate = K.gate.v / 100;
   const level = e => { const o = duck ? 1 - depth * e : 1 - depth * (1 - e); return { ga: 1 - (1 - o) * (1 - filt), fc: 30 * Math.pow(600, 1 - (1 - o) * filt) }; };
   /* envelope as linear segments, same rules as the engine: rise while the
@@ -415,7 +419,8 @@ async function connectLab() {
     log('Alchemy Lab connected (Stencil).', 'ok');
     try {
       const r = (await req(0x61)).body; let o = 2;
-      if (r[0] === 0) { for (let i = 0; i < r[1]; i++) { const n = r[o++]; words[i] = String.fromCharCode(...r.slice(o, o + n)); o += n; } saveLocal(); log('Read the 8 words stored on the Lab.'); }
+      if (r[0] === 0) { for (let i = 0; i < r[1]; i++) { const n = r[o++]; words[i] = String.fromCharCode(...r.slice(o, o + n)); o += n; } saveLocal();
+        if (r.length >= o + 8) { fit = r[o + 7]; $('fit').value = fit; } log('Read the 8 words stored on the Lab.'); }
     } catch (e) { log('Could not read the words back: ' + e.message, 'err'); }
     $('word').value = words[slot]; renderAll();
   } catch (e) { if (e.name !== 'NotFoundError') log('Lab: ' + e.message, 'err'); }
@@ -444,7 +449,11 @@ async function send(cmd, what) {
   return ok;
 }
 $('sendWord').onclick = () => send(SC.cmdSetWord(slot, words[slot]), `word ${slot + 1} "${words[slot]}"`);
-$('sendPlay').onclick = async () => { await send(SC.cmdSetWord(slot, words[slot]), `word ${slot + 1} "${words[slot]}"`); await send(SC.cmdSelect(SC.SRC.MORSE, slot), 'Morse, word ' + (slot + 1)); };
+$('sendPlay').onclick = async () => {
+  await send(SC.cmdSetWord(slot, words[slot]), `word ${slot + 1} "${words[slot]}"`);
+  await send(SC.cmdSetFit(fit), 'fit ' + SC.FITS[fit]);
+  await send(SC.cmdSelect(SC.SRC.MORSE, slot), 'Morse, word ' + (slot + 1));
+};
 $('sendUser').onclick = () => send(SC.cmdSetUser(user), `user pattern (${user.length} steps)`);
 $('sendAll').onclick = async () => { for (let i = 0; i < 8; i++) await send(SC.cmdSetWord(i, words[i]), `word ${i + 1} "${words[i]}"`); };
 $('connLab').onclick = connectLab;
@@ -460,6 +469,9 @@ function syncButtons() {
   if (!navigator.requestMIDIAccess) $('connPatch').title = 'Needs WebMIDI (Chrome or Edge)';
 }
 
+SC.FITS.forEach((name, i) => { const o = document.createElement('option'); o.value = i; o.textContent = name; $('fit').appendChild(o); });
+$('fit').value = fit;
+$('fit').onchange = () => { fit = +$('fit').value; renderAll(false); };
 renderKnobs();
 $('word').value = words[slot];
 renderAll();

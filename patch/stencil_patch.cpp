@@ -13,6 +13,9 @@
  *   encoder         turn = menu, push+turn = edit; click on Word = type a
  *                   word; push+turn on Mods = module picker
  *
+ * Fit (menu) says how a Morse word sits in the bar: Free, Pad to the next
+ * bar line, or stretched to loop in exactly 1, 2, 4 or 8 bars.
+ *
  * PATTERN means what Source says: one of 16 factory patterns or the user
  * pattern (Bank), the number of hits (Euclid), which of 8 stored words is
  * spelled (Morse). The engine is core/stencil.c, shared with the Alchemy
@@ -57,7 +60,7 @@ static const char *const INPUT_NAME[2]          = {"Stereo", "Mono"};
 struct Settings
 {
     uint32_t   magic;
-    uint8_t    source, rate, steps, polarity, curve, ppqn, input;
+    uint8_t    source, rate, steps, polarity, curve, ppqn, input, fit;
     int8_t     r_off;
     uint8_t    attack, filter, reso, swing, mix;  /* percent */
     uint16_t   bpm;
@@ -66,7 +69,7 @@ struct Settings
     bool operator==(const Settings &o) const { return memcmp(this, &o, sizeof *this) == 0; }
     bool operator!=(const Settings &o) const { return !(*this == o); }
 };
-static constexpr uint32_t kMagic = 0x53544E31; /* 'STN1' */
+static constexpr uint32_t kMagic = 0x53544E32; /* 'STN2' (2: + fit) */
 /* 7 MB + 128 KB: Relay owns the sector at 7 MB, and a shared one would reset
  * each firmware's settings (and these words) on every switch between them. */
 static constexpr uint32_t kSettingsOffset = 0x00720000;
@@ -83,6 +86,7 @@ static Settings defaults()
     s.curve    = 1;
     s.ppqn     = 2; /* 4 ppqn */
     s.input    = 0;
+    s.fit      = ST_FIT_PAD;
     s.r_off    = 0;
     s.attack   = 2;
     s.filter   = 0;
@@ -163,13 +167,14 @@ static st_params_t build_params(void)
     p.resonance = S->reso / 100.0f;
     p.polarity  = S->polarity;
     p.mix       = S->mix / 100.0f;
+    p.fit       = S->fit;
     return p;
 }
 
 static bool pattern_inputs_differ(const st_params_t &a, const st_params_t &b)
 {
     return a.source != b.source || a.bank != b.bank || a.steps != b.steps || a.hits != b.hits
-           || a.word != b.word || a.r_offset != b.r_offset;
+           || a.word != b.word || a.r_offset != b.r_offset || a.fit != b.fit || a.rate != b.rate;
 }
 
 static void push_params(void)
@@ -209,6 +214,7 @@ static void sysex(const uint8_t *d, int n)
          * word or bank says which -- shown until the knob moves */
         S->source = p.source;
     }
+    S->fit = p.fit;
     g_rebuild     = true;
     g_sysex_until = System::GetNow() + 400;
     mark_dirty();
@@ -298,6 +304,7 @@ enum MenuItem
 {
     MI_SOURCE,
     MI_WORD,
+    MI_FIT,
     MI_RATE,
     MI_STEPS,
     MI_ATTACK,
@@ -315,7 +322,7 @@ enum MenuItem
     MI_COUNT
 };
 static const char *const MENU_LABEL[MI_COUNT]
-    = {"Source", "Word", "Rate", "Steps", "Attack", "Curve", "Filter", "Reso",
+    = {"Source", "Word", "Fit", "Rate", "Steps", "Attack", "Curve", "Filter", "Reso",
        "Mode",   "Swing", "R Off", "Mix", "Tempo", "ClkIn", "Input", "Mods"};
 static constexpr int MENU_ROWS = 3;
 static int           g_sel = MI_SOURCE, g_top = 0;
@@ -330,6 +337,7 @@ static void menu_edit(int inc)
     {
         case MI_SOURCE: S->source = (uint8_t)clampi(S->source + inc, 0, ST_SRC_COUNT - 1); break;
         case MI_WORD: return; /* click to edit */
+        case MI_FIT: S->fit = (uint8_t)clampi(S->fit + inc, 0, ST_FIT_COUNT - 1); break;
         case MI_RATE: S->rate = (uint8_t)clampi(S->rate + inc, 0, ST_RATE_COUNT - 1); break;
         case MI_STEPS: S->steps = (uint8_t)clampi(S->steps + inc, 1, ST_MAX_STEPS); break;
         case MI_ATTACK: S->attack = (uint8_t)clampi(S->attack + inc, 0, 100); break;
@@ -476,7 +484,11 @@ static void draw(void)
     /* Row 0: what plays, and the tempo */
     const int ix = pattern_index();
     if(S->source == ST_SRC_EUCLID) snprintf(line, sizeof line, "EUCLID %d/%d", ix, S->steps);
-    else if(S->source == ST_SRC_MORSE) snprintf(line, sizeof line, "MORSE %d", ix + 1);
+    else if(S->source == ST_SRC_MORSE)
+    {
+        static const char *const FIT_SHORT[ST_FIT_COUNT] = {"free", "pad", "1bar", "2bar", "4bar", "8bar"};
+        snprintf(line, sizeof line, "MORSE %d %s", ix + 1, FIT_SHORT[S->fit % ST_FIT_COUNT]);
+    }
     else if(ix == ST_USER_PATTERN) snprintf(line, sizeof line, "BANK user");
     else snprintf(line, sizeof line, "BANK %d", ix + 1);
     hw.display.SetCursor(0, 0);
@@ -519,6 +531,7 @@ static void draw(void)
             case MI_WORD:
                 snprintf(num, sizeof num, "%.12s", S->store.words[S->source == ST_SRC_MORSE ? ix : 0]);
                 break;
+            case MI_FIT: value = st_fit_name[S->fit]; break;
             case MI_RATE: value = st_rate_name[S->rate]; break;
             case MI_STEPS: snprintf(num, sizeof num, "%d", S->steps); break;
             case MI_ATTACK: snprintf(num, sizeof num, "%d%%", S->attack); break;

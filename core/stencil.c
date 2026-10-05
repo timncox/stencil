@@ -4,6 +4,8 @@
 #include <math.h>
 #include <string.h>
 
+const char *const st_fit_name[ST_FIT_COUNT] = {
+    "Free", "Pad", "1 bar", "2 bars", "4 bars", "8 bars"};
 const char *const st_rate_name[ST_RATE_COUNT] = {
     "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2", "1/1"};
 const float st_rate_steps_per_beat[ST_RATE_COUNT] = {
@@ -50,6 +52,7 @@ void st_default_params(st_params_t *p)
     p->resonance = 0.2f;
     p->polarity  = ST_POL_GATE;
     p->mix       = 1.0f;
+    p->fit       = ST_FIT_PAD;
 }
 
 static const char *const k_default_words[ST_WORDS] = {
@@ -155,7 +158,18 @@ void st_build_pattern(const st_params_t *p, const st_store_t *s, st_pattern_t *o
             const unsigned w = p->word < ST_WORDS ? p->word : 0;
             out->len = st_morse_encode(s->words[w], L, ST_MAX_UNITS);
             out->tie = 1;
-            if (out->len == 0) { out->len = 1; L[0] = 1u; } /* nothing to spell: open */
+            if (out->len == 0) { out->len = 1; L[0] = 1u; break; } /* nothing to spell: open */
+            if (p->fit == ST_FIT_PAD)
+            {
+                /* closed steps to the next bar line; every rate has a whole
+                 * number of steps in a 4/4 bar (32 at 1/32 .. 1 at 1/1) */
+                const uint32_t bar = (uint32_t)(4.0f * st_rate_steps_per_beat[p->rate < ST_RATE_COUNT ? p->rate : ST_RATE_1_16] + 0.5f);
+                uint32_t padded = (out->len + bar - 1u) / bar * bar;
+                while (padded > ST_MAX_UNITS && padded >= bar) padded -= bar;   /* whole bars that fit */
+                if (padded >= out->len) out->len = padded;
+            }
+            else if (p->fit >= ST_FIT_1_BAR && p->fit < ST_FIT_COUNT)
+                out->beats = (uint16_t)(4u << (p->fit - ST_FIT_1_BAR));
             break;
         }
         case ST_SRC_BANK:
@@ -272,7 +286,10 @@ float st_gain(const stencil_t *st, int ch) { return st->gain[ch & 1]; }
 uint32_t st_step(const stencil_t *st)
 {
     const st_pattern_t *pt = st_front_pattern(st);
-    return (uint32_t)((uint64_t)(st->pos + 1e-7) % pt->len);
+    const double pq = st->pos + 1e-7;
+    if (pt->beats)
+        return (uint32_t)((uint64_t)(pq / steps_per_beat(st) * (double)pt->len / (double)pt->beats) % pt->len);
+    return (uint32_t)((uint64_t)pq % pt->len);
 }
 
 static inline float shape(float e, float c)
@@ -356,8 +373,17 @@ void st_process(stencil_t *st, const float *in_l, const float *in_r,
         const double   ph   = pq - 2.0 * (double)pair;
         uint64_t idx;
         double   phi, steplen;
-        if (ph < 1.0 + swing) { idx = 2 * pair;     steplen = 1.0 + swing; phi = ph / steplen; }
-        else                  { idx = 2 * pair + 1; steplen = 1.0 - swing; phi = (ph - 1.0 - swing) / steplen; }
+        if (pt->beats)
+        {
+            /* stretched: the pattern is pt->beats long, whatever its units */
+            const double upb = (double)pt->len / (double)pt->beats;   /* units per beat */
+            const double u   = pq / spb * upb;
+            idx     = (uint64_t)u;
+            phi     = u - (double)idx;
+            steplen = spb / upb;                                    /* in steps */
+        }
+        else if (ph < 1.0 + swing) { idx = 2 * pair;     steplen = 1.0 + swing; phi = ph / steplen; }
+        else                       { idx = 2 * pair + 1; steplen = 1.0 - swing; phi = (ph - 1.0 - swing) / steplen; }
         const float fps = (float)(steplen / rate);      /* frames in this step */
 
         float att = p->attack * fps;
@@ -408,7 +434,7 @@ void st_process(stencil_t *st, const float *in_l, const float *in_r,
     /* keep pos bounded over very long runs (a whole number of patterns) */
     if (!st->locked && st->pos > 1.0e9)
     {
-        const double wrap = (double)pt->len * 2.0;
+        const double wrap = pt->beats ? (double)pt->beats * spb * 4.0 : (double)pt->len * 2.0;
         const double k = floor(st->pos / wrap) * wrap;
         st->pos -= k;
     }
@@ -455,6 +481,12 @@ int st_apply_cmd(st_store_t *s, st_params_t *p, uint8_t cmd, const uint8_t *pl, 
             if (src == ST_SRC_BANK)   p->bank = ix;
             if (src == ST_SRC_EUCLID) p->hits = ix;
             if (src == ST_SRC_MORSE)  p->word = ix;
+            return 0;
+        }
+        case ST_CMD_SET_FIT:
+        {
+            if (len != 1 || pl[0] >= ST_FIT_COUNT) return 1;
+            p->fit = pl[0];
             return 0;
         }
         default:

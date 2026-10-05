@@ -75,6 +75,24 @@
     return ((i % n) * k) % n < k ? 1 : 0;
   }
 
+  /* How a Morse word sits in the bar (st_fit_t). */
+  const FITS = ['Free', 'Pad', '1 bar', '2 bars', '4 bars', '8 bars'];
+
+  /* -> { bits, beats }: beats > 0 when the word is stretched over n bars. */
+  function fitMorse(bits, fit, rateIndex) {
+    if (!bits.length) return { bits: [1], beats: 0 };
+    if (fit === 1) {
+      const bar = Math.round(4 * RATES[rateIndex][1]);
+      let padded = Math.ceil(bits.length / bar) * bar;
+      while (padded > MAX_UNITS && padded >= bar) padded -= bar;
+      const out = bits.slice();
+      while (out.length < padded) out.push(0);
+      return { bits: out, beats: 0 };
+    }
+    if (fit >= 2 && fit <= 5) return { bits: bits.slice(), beats: 4 << (fit - 2) };
+    return { bits: bits.slice(), beats: 0 };
+  }
+
   const RATES = [['1/32', 8], ['1/16T', 6], ['1/16', 4], ['1/8T', 3], ['1/8', 2],
     ['1/4T', 1.5], ['1/4', 1], ['1/2', 0.5], ['1/1', 0.25]];
 
@@ -141,7 +159,7 @@
 
   /* ---- Stencil commands (the payloads st_apply_cmd() takes) --------------- */
 
-  const CMD = { SET_WORD: 1, SET_USER: 2, SELECT: 3 };
+  const CMD = { SET_WORD: 1, SET_USER: 2, SELECT: 3, SET_FIT: 4 };
   const SRC = { BANK: 0, EUCLID: 1, MORSE: 2 };
 
   function cmdSetWord(slot, text) {
@@ -156,12 +174,13 @@
     return [CMD.SET_USER, steps.length, ...g];
   }
   function cmdSelect(source, index) { return [CMD.SELECT, source, index]; }
+  function cmdSetFit(fit) { return [CMD.SET_FIT, fit]; }
 
   /* SysEx for the Patch: F0 7D 53 54 <cmd> <payload> F7. */
   function sysex(cmd) { return [0xf0, 0x7d, 0x53, 0x54, ...cmd, 0xf7]; }
 
   const api = {
-    morseChar, morseEncode, cleanWord, BANK, euclidHit, RATES, MAX_UNITS, WORD_MAX, WORDS,
+    morseChar, morseEncode, cleanWord, BANK, euclidHit, RATES, FITS, fitMorse, cmdSetFit, MAX_UNITS, WORD_MAX, WORDS,
     crc32, cobsEncode, cobsDecode, hostlinkFrame, hostlinkParse,
     CMD, SRC, cmdSetWord, cmdSetUser, cmdSelect, sysex
   };

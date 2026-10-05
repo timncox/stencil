@@ -28,8 +28,8 @@ unproven".
 
 ```
 core/     stencil.h, stencil.c      the engine (C99, no hardware)
-test/     make -C test              native tests (ASan + UBSan), 256 checks
-          make -C test web          the web page's JS vs the C engine, 70 checks
+test/     make -C test              native tests (ASan + UBSan), 302 checks
+          make -C test web          the web page's JS vs the C engine, 396 checks
 patch/    make -C patch             Daisy Patch -> build/stencil_patch.bin
 alchemy/  make -C alchemy           Alchemy Lab -> build/stencil_alchemy.bin
 docs/     index.html                the word page: type, audition, send
@@ -51,6 +51,15 @@ Lab card).
   between letters, 7 between words and at the loop point (PARIS = 50 steps).
   Letters, digits and `.,?'!/()&:;=+-_"$@`; anything else is skipped. Up to
   48 characters, 1024 steps.
+- **FIT (Morse).** How a word sits in the bar, in 4/4. *Free*: one step
+  per unit, the loop as long as the word spells (PARIS = 50 sixteenths,
+  12½ beats — it drifts against the bar). *Pad* (the default): one step per
+  unit, the closing gap stretched to the next bar line (PARIS at 1/16 → 64
+  steps = 4 bars; at 1/8 → 56 = 7 bars). *1 / 2 / 4 / 8 bars*: the whole
+  word, closing gap included, stretched to loop in exactly that many bars
+  (PARIS in 1 bar = 50 units of 40 ms at 120 BPM); units leave the step
+  grid, RATE and SWING stop applying, the clock and reset still line it up
+  on the bar.
 - **Stereo.** The left channel plays the pattern, the right plays it
   delayed by R OFFSET steps.
 - **Slice envelope**, in fractions of a step: ATTACK 0–100 %, GATE 5–100 %
@@ -90,7 +99,7 @@ Lab card).
 | TRS MIDI, Seed micro-USB | MIDI clock (24 ppqn, overrides GATE IN 1 while it runs), Start = reset, SysEx |
 | encoder | turn = menu, push+turn = edit, click on Word = type a word, push+turn on Mods = picker |
 
-Menu: Source, Word, Rate, Steps, Attack, Curve, Filter, Reso, Mode
+Menu: Source, Word, Fit, Rate, Steps, Attack, Curve, Filter, Reso, Mode
 (Gate/Duck), Swing, R Off, Mix, Tempo, ClkIn (ppqn), Input, Mods. Settings
 and the eight words persist in QSPI (7 MB + 128 KB in, clear of Relay's
 sector at 7 MB) two seconds after the last edit.
@@ -104,7 +113,9 @@ points at (in Morse mode), or word 1.
 ## Alchemy Lab
 
 PLAY: RATE, PATTERN, GATE, ATTACK, RELEASE, DEPTH.
-SHIFT (hold B3): FILTER, STEPS, R OFFSET, SWING, MIX, TEMPO.
+SHIFT (hold B3): FILTER, STEPS, R OFFSET, SWING, MIX, TEMPO. In Morse,
+STEPS is **FIT** (six zones: Free, Pad, 1, 2, 4, 8 bars; the ring shows the
+zone in cyan).
 Settings (B2+B3 two seconds): P1 brightness, P2 Curve, P3/P4 the SDK's
 preset slot and action, P5 Clock In (1/2/4/24 ppqn), P6 Input (Stereo /
 Mono L); page 2 is the SD firmware picker.
@@ -129,7 +140,7 @@ Meld 6, MI 7–11, Smack 12, Mark 13, Belt 14, Relay 15.
 
 ## The web page (`docs/index.html`)
 
-Type a word into one of eight slots and see it spelled (letters, dits and
+Type a word into one of eight slots, pick its FIT (1, 2, 4, 8 bars...), and see it spelled (letters, dits and
 dahs, and a paper-tape strip of the steps); audition it in the browser over
 a pad, drone or noise with the same envelope rules; browse the bank, set
 Euclid hits, draw a user pattern; send to the module. Open it from a file
@@ -151,6 +162,7 @@ Commands (`st_apply_cmd()`, shared by both):
 | 1 SET_WORD | slot 0–7, ASCII bytes (≤ 48) | lower case is raised; non-printables dropped |
 | 2 SET_USER | length 1–32, 5 bytes of 7-bit mask, LSB first | |
 | 3 SELECT | source (0 bank, 1 Euclid, 2 Morse), index | Lab: PATTERN pot catches from there. Patch: switches Source; the knob keeps choosing |
+| 4 SET_FIT | 0 Free, 1 Pad, 2 1 bar, 3 2 bars, 4 4 bars, 5 8 bars | Lab: STEPS/FIT pot catches from there |
 
 `docs/stencil-core.js` holds the page's Morse table, patterns and both wire
 formats; `make -C test web` proves it spells every test word bit-for-bit as

@@ -31,6 +31,15 @@ for (const t of texts) {
   check(c === js, `morse "${t.slice(0, 20)}": C ${c.length} JS ${js.length}`);
 }
 
+// Fit: padded / stretched patterns agree for every fit and rate
+for (const t of ['E', 'PARIS', 'SOS', 'HELLO WORLD', '', '0'.repeat(48)]) {
+  for (let f = 0; f < SC.FITS.length; f++) for (let r = 0; r < SC.RATES.length; r++) {
+    const c = await ask(`P ${f} ${r} ${t}`);
+    const clean = SC.cleanWord(t).slice(0, SC.WORD_MAX);
+    const js = SC.fitMorse(SC.morseEncode(clean), f, r);
+    check(c === `${js.bits.length} ${js.beats} ${js.bits.join('')}`, `fit ${f} rate ${r} "${t.slice(0, 8)}"`);
+  }
+}
 const hex = a => a.map(b => b.toString(16)).join(' ');
 // user pattern packing: random masks of every length
 let seed = 7;
@@ -53,6 +62,8 @@ for (const [s, i] of [[0, 16], [1, 32], [2, 7]]) {
   check(r[0] === '0' && +r[r.length - 2] === s && +r[r.length - 1] === i, `select ${s} ${i}`);
 }
 check((await ask('C ' + hex(SC.cmdSelect(0, 17)))).startsWith('1 '), 'select out of range refused');
+check((await ask('C ' + hex(SC.cmdSetFit(3)))).startsWith('0 '), 'set fit');
+check((await ask('C ' + hex(SC.cmdSetFit(6)))).startsWith('1 '), 'set fit out of range refused');
 
 // HostLink framing
 check(SC.crc32([...'123456789'].map(c => c.charCodeAt(0))) === 0xcbf43926, 'crc32 check value');

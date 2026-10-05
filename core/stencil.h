@@ -51,6 +51,15 @@ typedef enum {
 extern const char *const st_rate_name[ST_RATE_COUNT];
 extern const float       st_rate_steps_per_beat[ST_RATE_COUNT];
 
+/* How a Morse word sits in the bar (4/4). FREE: one step per unit, the
+ * loop is as long as the word. PAD: one step per unit, the closing gap
+ * stretched to the next bar line. BARS_n: the whole word, closing gap
+ * included, stretched to loop in exactly n bars (units leave the grid). */
+typedef enum {
+    ST_FIT_FREE = 0, ST_FIT_PAD, ST_FIT_1_BAR, ST_FIT_2_BARS, ST_FIT_4_BARS, ST_FIT_8_BARS, ST_FIT_COUNT
+} st_fit_t;
+extern const char *const st_fit_name[ST_FIT_COUNT];
+
 typedef struct {
     /* pattern */
     uint8_t source;      /* st_source_t                                         */
@@ -74,6 +83,7 @@ typedef struct {
     float   resonance;   /* 0..0.9, lowpass only                                 */
     uint8_t polarity;    /* st_polarity_t                                        */
     float   mix;         /* 0 dry .. 1 wet                                       */
+    uint8_t fit;         /* st_fit_t, MORSE only                                 */
 } st_params_t;
 
 void st_default_params(st_params_t *p);
@@ -82,6 +92,8 @@ void st_default_params(st_params_t *p);
 typedef struct {
     uint32_t len;                         /* steps, 1..ST_MAX_UNITS */
     uint8_t  tie;                         /* runs of open steps hold through (Morse) */
+    uint16_t beats;                       /* >0: the pattern spans this many beats,
+                                             units stretched to fit (Morse BARS_n)   */
     uint32_t bits[2][ST_MAX_UNITS / 32u];
 } st_pattern_t;
 
@@ -192,6 +204,7 @@ enum {
     ST_CMD_SET_WORD = 1,   /* u8 slot, then ASCII bytes (<= 48)              */
     ST_CMD_SET_USER = 2,   /* u8 len (1..32), u8 mask[5] 7-bit LSB-first      */
     ST_CMD_SELECT   = 3,   /* u8 source, u8 index (bank / hits / word slot)   */
+    ST_CMD_SET_FIT  = 4,   /* u8 st_fit_t                                     */
 };
 
 /* Apply one command. Returns 0 on success, nonzero for a malformed payload

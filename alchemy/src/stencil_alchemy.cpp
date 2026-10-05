@@ -6,12 +6,16 @@
  *   PLAY            [P1 RATE]    B1   [P2 PATTERN]
  *                   [P3 GATE]    B2   [P4 ATTACK]
  *                   [P5 RELEASE] B3   [P6 DEPTH]
- *   SHIFT (hold B3) FILTER, STEPS, R OFFSET, SWING, MIX, TEMPO
+ *   SHIFT (hold B3) FILTER, STEPS (FIT in Morse), R OFFSET, SWING, MIX, TEMPO
  *
  *   B1   tap: source BANK -> EUCLID -> MORSE     hold: GATE <-> DUCK
  *   B2   tap: tap tempo                          hold: bypass (gate open)
  *   J1/J2 audio in L/R   J3 clock in   J4 reset in   J5 CV pattern
  *   J6 CV depth   J7 envelope out (0..5 V)   J8 step trigger out   J9/J10 out
+ *
+ * In MORSE the STEPS pot is FIT instead: how the word sits in the bar --
+ * Free (as long as it spells), Pad (to the next bar line), or stretched to
+ * loop in exactly 1, 2, 4 or 8 bars. Its ring shows six zones then.
  *
  * PATTERN means what the source says: one of 16 factory patterns or the user
  * pattern (BANK), the number of hits (EUCLID), or which of eight stored words
@@ -195,7 +199,8 @@ static Manual manual = Manual()
     .Preamble(
         "**Stencil** cuts sustained sound into rhythm. A step pattern opens and "
         "closes a gate on each channel; GATE, ATTACK and RELEASE shape every "
-        "opening. FILTER turns the VCA gate into a 12 dB/oct lowpass that "
+        "opening. In Morse, STEPS becomes FIT: Free, Pad to the bar line, or "
+        "stretched to 1, 2, 4 or 8 bars. FILTER turns the VCA gate into a 12 dB/oct lowpass that "
         "carves the highs away instead. B1 picks the pattern source -- a "
         "factory **bank** pattern, a **Euclidean** spread, or a **Morse** "
         "word -- and, held, swaps GATE for DUCK (the level dips on each "
@@ -264,6 +269,14 @@ static float pattern_norm(int index, uint8_t source)
     return ((float)index + 0.5f) / (float)pattern_count(source);
 }
 
+/* MORSE: the STEPS pot is FIT, six zones */
+static uint8_t fit_now(void)
+{
+    int f = (int)(kn_steps.Norm() * (float)ST_FIT_COUNT);
+    return (uint8_t)(f < 0 ? 0 : f >= (int)ST_FIT_COUNT ? ST_FIT_COUNT - 1 : f);
+}
+static float fit_norm(uint8_t fit) { return ((float)fit + 0.5f) / (float)ST_FIT_COUNT; }
+
 /* ---- HostLink: the web page's words and patterns --------------------------- */
 
 enum : uint8_t { kCmdStencil = 0x60, kCmdGetWords = 0x61 };
@@ -291,6 +304,7 @@ class StencilExtension : public hostlink::IHostlinkExtension
             w.U8((uint8_t)pattern_index(kn_pat.Norm(), extras.source));
             w.U8(extras.store.user_len);
             w.U32(extras.store.user_mask);
+            w.U8(fit_now());
             return;
         }
         if (f.len < 1)
@@ -307,6 +321,8 @@ class StencilExtension : public hostlink::IHostlinkExtension
             w.U8((uint8_t)hostlink::Status::BadArgs);
             return;
         }
+        if (cmd == ST_CMD_SET_FIT)
+            pager.SetStored(kPageShift, kPotTopRight, fit_norm(p.fit), loop.Phys());
         if (cmd == ST_CMD_SELECT)
         {
             extras.source = p.source;
@@ -454,7 +470,8 @@ static float       g_saved_peak = 0.0f;
 static bool pattern_inputs_differ(const st_params_t& a, const st_params_t& b)
 {
     return a.source != b.source || a.bank != b.bank || a.steps != b.steps
-        || a.hits != b.hits || a.word != b.word || a.r_offset != b.r_offset;
+        || a.hits != b.hits || a.word != b.word || a.r_offset != b.r_offset
+        || a.fit != b.fit || a.rate != b.rate;
 }
 
 static void OnFrame(void)
@@ -495,6 +512,7 @@ static void OnFrame(void)
     p.resonance = 0.3f;
     p.polarity = extras.polarity;
     p.mix      = kn_mix.Value() / 100.0f;
+    p.fit      = fit_now();
 
     /* the tempo pot moves the free tempo; tap and lock write it too */
     if (fabsf(p.bpm - extras.free_bpm) >= 0.5f) { extras.free_bpm = p.bpm; mark_dirty(now); }
@@ -555,6 +573,23 @@ static void PatternOverdraw(LedPanel& panel, uint8_t pot, const ArcGeometry& geo
         if (i == step) c = panel.ScaleGlobal(kWhite);
         const float hour = geo.start_hour + geo.step_hours * (float)k;
         panel.SetRingByHour(pot, fmodf(hour, 12.0f), c);
+    }
+}
+
+/* STEPS in MORSE is FIT: six zones, the chosen one lit cyan. */
+static void FitOverdraw(LedPanel& panel, uint8_t pot, const ArcGeometry& geo,
+                        float norm, uint32_t t_ms, void* ctx)
+{
+    (void)norm; (void)t_ms; (void)ctx;
+    if (extras.source != ST_SRC_MORSE) return;
+    const uint32_t n = geo.arc_leds ? geo.arc_leds : 1u;
+    const uint32_t f = fit_now();
+    for (uint32_t k = 0; k < n; k++)
+    {
+        const uint32_t zone = k * ST_FIT_COUNT / n;
+        const LedPanel::Rgb c = zone == f ? panel.ScaleGlobal(kSrcCol[ST_SRC_MORSE])
+                                          : panel.ScaleGlobal(kColDim);
+        panel.SetRingByHour(pot, fmodf(geo.start_hour + geo.step_hours * (float)k, 12.0f), c);
     }
 }
 
@@ -682,6 +717,7 @@ int main(void)
     cv_matrix.Jack(5).Off();
 
     kn_pat.Overdraw(PatternOverdraw);
+    kn_steps.Overdraw(FitOverdraw);
 
     host.Product("Stencil")
         .BootSlot(kHomeSlot)
