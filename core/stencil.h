@@ -162,7 +162,7 @@ typedef struct {
     float    gain[2];          /* last applied amplitude, for meters */
     st_svf_t svf[2];
     int32_t  last_step[2];
-    uint32_t step_starts;      /* count of open-step starts on the left */
+    uint32_t step_starts;      /* open-step starts on the left (Morse: per element) */
 } stencil_t;
 
 void st_init(stencil_t *st, float sample_rate);

@@ -404,7 +404,9 @@ void st_process(stencil_t *st, const float *in_l, const float *in_r,
 
             if ((int32_t)i32 != st->last_step[ch])
             {
-                if (ch == 0 && open) st->step_starts++;
+                /* one start per element: in Morse a dah's three units are one */
+                if (ch == 0 && open && !(pt->tie && st_pattern_open(pt, ch, i32 + pt->len - 1u)))
+                    st->step_starts++;
                 st->last_step[ch] = (int32_t)i32;
             }
 

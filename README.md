@@ -28,12 +28,14 @@ unproven".
 
 ```
 core/     stencil.h, stencil.c      the engine (C99, no hardware)
-test/     make -C test              native tests (ASan + UBSan), 302 checks
+test/     make -C test              native tests (ASan + UBSan), 303 checks
           make -C test web          the web page's JS vs the C engine, 396 checks
 patch/    make -C patch             Daisy Patch -> build/stencil_patch.bin
 alchemy/  make -C alchemy           Alchemy Lab -> build/stencil_alchemy.bin
 docs/     index.html                the word page: type, audition, send
 tools/    hostlink-fs.mjs           card access over HostLink (Alchemy)
+alchemy/emu.mk, alchemy/emu-tests/  the real Lab firmware on the alchemy-lab emulator:
+          make -C <alchemy-lab>/emu test-custom FW_DIR=<this repo>/alchemy   (5 scripts, 33 checks)
 ```
 
 Dependencies are taken by path from `~/tim-os/daisy-sdk`, as Relay does: the

@@ -1,0 +1,24 @@
+# First boot: a sixteenth trance gate at 120 BPM (bank 1, gate 50 %, depth 100 %).
+# 8 steps a second -> 16 step triggers on J8 in 2 s; the gate cuts the level
+# well below the ungated tone (0.135 rms); J7 swings the full envelope.
+wait 3000
+expect booted
+sing 220
+wait 500
+mark
+wait 2000
+expect edges 8 > 13
+expect edges 8 < 19
+expect rms > 0.07
+expect rms < 0.115
+expect cvrange 7 > 4
+expect led b1 amber
+# GATE to 100 %: every step open the whole way -> the full level
+pot 3 0.47
+wait 300
+pot 3 1.0
+wait 600
+mark
+wait 1000
+expect rms > 0.125
+expect finite

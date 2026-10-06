@@ -354,6 +354,7 @@ static void test_morse_tie(void)
     CHECKF(out_at(12000 + 4500), 0.0f, 1e-4);     /* unit 3 past the gate: closes */
     CHECKF(out_at(18000 + 3000), 0.0f, 1e-4);     /* the word gap                 */
     CHECKF(out_at(60000 + 1000), 1.0f, 1e-4);     /* loops after 10 units         */
+    CHECK(S.step_starts == 2);                    /* one per dah, not one per unit */
 }
 
 static void test_fit(void)

@@ -1,0 +1,15 @@
+# B2 held = bypass (gate held open, B2 white); let go and the gate is back.
+wait 3000
+sing 220
+press b2
+wait 600
+mark
+wait 1000
+expect rms > 0.125
+expect led b2 white
+release b2
+wait 600
+mark
+wait 1000
+expect rms < 0.115
+expect led b2 grey

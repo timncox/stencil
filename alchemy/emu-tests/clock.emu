@@ -1,0 +1,145 @@
+# A 4 ppqn clock on J3 (Settings default): 100 ms pulses = 150 BPM.
+# B2 turns blue when locked and J8 follows the clock: one trigger a pulse
+# (sixteenths, all open). J4 resets. Clock gone -> grey, free-running again.
+wait 3000
+sing 220
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+expect led b2 blue
+mark
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+expect edges 8 > 12
+expect edges 8 < 18
+cv 4 5
+wait 5
+cv 4 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+cv 3 5
+wait 5
+cv 3 0
+wait 95
+expect alive
+wait 3000
+expect led b2 grey
+expect finite

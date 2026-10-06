@@ -1,0 +1,18 @@
+# B1 taps: bank (amber) -> Euclid (green) -> Morse (cyan). Morse word 1 is
+# STENCIL; at first boot STEPS/FIT sits in the 1-bar zone, so the word loops
+# every 2 s at 120 BPM: 17 dits and dahs a bar, one J8 trigger each.
+wait 3000
+sing 220
+tap b1
+wait 400
+expect led b1 green
+tap b1
+wait 400
+expect led b1 rgb 10 62 77
+wait 2000
+mark
+wait 4000
+expect edges 8 > 30
+expect edges 8 < 38
+expect cvrange 7 > 4
+expect finite
