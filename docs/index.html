@@ -45,6 +45,7 @@ h1 { font: 800 clamp(48px, 9vw, 88px)/0.9 var(--display); letter-spacing: 0.02em
 .tag { color: var(--muted); max-width: 46ch; margin: 6px 0 0; }
 .conn { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 6px 12px; font: 600 13px var(--mono); color: var(--ink); cursor: pointer; }
+a.chip { text-decoration: none; }
 .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .chip.on .dot { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
 .chip:disabled { opacity: 0.55; cursor: not-allowed; }
@@ -104,6 +105,7 @@ select { font: 14px var(--body); padding: 4px 6px; background: var(--panel); col
       <p class="tag">Type a word, hear its Morse as a gate pattern, fit it to 1, 2, 4 or 8 bars, and send it to the Alchemy Lab or the Daisy Patch. Dit is one unit open, dah is three.</p>
     </div>
     <div class="conn">
+      <a class="chip" id="manualLink" href="../">Manual</a>
       <button class="chip" id="connLab" type="button"><span class="dot"></span>Alchemy Lab · USB</button>
       <button class="chip" id="connPatch" type="button"><span class="dot"></span>Daisy Patch · MIDI</button>
     </div>
